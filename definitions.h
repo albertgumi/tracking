@@ -2,9 +2,6 @@
 #ifndef DEFINITIONS_CUH
 #define DEFINITIONS_CUH 1
 
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
-
 #include <stdio.h>
 #include <math.h>
 
@@ -27,6 +24,31 @@
 
 #define PARAM_TOLERANCE PARAM_TOLERANCE_EXTENDED
 #define PARAM_MAXCHI2 PARAM_MAXCHI2_EXTENDED
+
+
+#define S_ROWS 2
+#define S_COLS 2
+#define F_ROWS 4
+#define F_COLS 4
+#define H_ROWS 2
+#define H_COLS 4
+#define R_ROWS 2
+#define R_COLS 2
+#define I_ROWS 4
+#define I_COLS 4
+#define P_ROWS 4
+#define P_COLS 4
+#define Y_ROWS 2
+#define Y_COLS 1
+#define K_ROWS 4
+#define K_COLS 2
+#define X_ROWS 4
+#define X_COLS 1
+#define Z_ROWS 2
+#define Z_COLS 1
+#define I_ROWS 4
+#define I_COLS 4
+
 
 struct Sensor {
 	int z;
@@ -61,19 +83,5 @@ struct Track { // 57 + 24*4 = 324 B
 	int hits[TRACK_SIZE];
 };
 
-/*
-__device__ __constant__ float 	f_m_maxXSlope			= 0.4f;
-__device__ __constant__ float 	f_m_maxYSlope			= 0.3f;
-__device__ __constant__ float 	f_m_maxZForRBeamCut		= 200.0f;
-__device__ __constant__ float 	f_m_maxR2Beam			= 1.0f;
-__device__ __constant__ int 	f_m_maxMissed			= 4;
-__device__ __constant__ float 	f_m_extraTol			= 0.150f;
-__device__ __constant__ float 	f_m_maxChi2ToAdd		= 100.0f;
-__device__ __constant__ float 	f_m_maxChi2SameSensor	= 16.0f;
-__device__ __constant__ float   f_m_maxChi2Short		= 6.0f;
-__device__ __constant__ float   f_m_maxChi2PerHit		= 16.0f;
-__device__ __constant__ int 	f_m_sensNum				= 48;
-__device__ __constant__ float   f_w						= 0.0144338f; // 0.050 / sqrt( 12. )
-*/
 
 #endif
