@@ -5,16 +5,74 @@
 
  
 #define MAX_SOURCE_SIZE (0x100000)
- 
-int main(void) {
+
+int* h_no_sensors;
+int* h_no_hits;
+int* h_sensor_Zs;
+int* h_sensor_hitStarts;
+int* h_sensor_hitNums;
+int* h_hit_IDs;
+float* h_hit_Xs;
+float* h_hit_Ys;
+int* h_hit_Zs;
+
+/** Read the dump file that contains the tracking information.
+ *
+ * @param filename route to the dump file
+ * @param input char vector pointer that will hold the information of the file
+ * @param size holds the size of the file
+ */
+void readFile(char* filename, char** input, int* size){
+	
+    FILE *fd;
+    
+    fd = fopen(filename, "rb");
+    if(fd == NULL) {
+        fprintf(stderr,"The file %s cannot be opened\n",filename);
+        exit(-1);
+    }
+    
+    fseek(fd, 0, SEEK_END);
+    *size = ftell(fd);       // Get the size of the file
+    
+    rewind(fd);
+    *input = (char*)malloc(*size * (sizeof(char)));
+    fread(*input, sizeof(char), *size, fd);     //read the content
+    fclose(fd);
+
+	h_no_sensors = (int*) input[0];
+	h_no_hits = (int*) (h_no_sensors + 1);
+	h_sensor_Zs = (int*) (h_no_hits + 1);
+	h_sensor_hitStarts = (int*) (h_sensor_Zs + h_no_sensors[0]);
+	h_sensor_hitNums = (int*) (h_sensor_hitStarts + h_no_sensors[0]);
+	h_hit_IDs = (int*) (h_sensor_hitNums + h_no_sensors[0]);
+	h_hit_Xs = (float*) (h_hit_IDs + h_no_hits[0]);
+	h_hit_Ys = (float*) (h_hit_Xs + h_no_hits[0]);
+	h_hit_Zs = (int*) (h_hit_Ys + h_no_hits[0]);
+
+
+//#ifdef DEBUG
+    printf("h_no_sensors %d\n",*h_no_sensors);
+    printf("no_hits %d\n",*h_no_hits);
+    printf("sensor_Zs %d\n",*h_sensor_Zs);
+    printf("sensor_hitStarts %d\n",*h_sensor_hitStarts);
+    printf("sensor_hitNums %d\n",*h_sensor_hitNums);
+    printf("hit_IDs %d\n",*h_hit_IDs);
+    printf("hit_Xs %f\n",*h_hit_Xs);
+    printf("hit_Ys %f\n",*h_hit_Ys);
+    printf("hit_Zs %d\n",*h_hit_Zs);
+//#endif
+
+}
+int gpuLoad(void) {
     // Create the two input vectors
     int i;
-    const int LIST_SIZE = 1024;
+    const int LIST_SIZE = *h_no_hits;
     float *A = (float*)malloc(sizeof(float)*LIST_SIZE);
     float *B = (float*)malloc(sizeof(float)*LIST_SIZE);
     for(i = 0; i < LIST_SIZE; i++) {
-        A[i] = i;
-        B[i] = LIST_SIZE - i;
+        A[i] = h_hit_Xs[i];
+        B[i] = h_hit_Ys[i];
     }
  
     // Load the kernel source code into the array source_str
@@ -56,7 +114,7 @@ int main(void) {
  
     // Copy the lists A and B to their respective memory buffers
     ret = clEnqueueWriteBuffer(command_queue, a_mem_obj, CL_TRUE, 0,
-            LIST_SIZE * sizeof(float), A, 0, NULL, NULL);
+            LIST_SIZE * sizeof(float), h_hit_Xs, 0, NULL, NULL);
     ret = clEnqueueWriteBuffer(command_queue, b_mem_obj, CL_TRUE, 0, 
             LIST_SIZE * sizeof(float), B, 0, NULL, NULL);
  
@@ -74,10 +132,11 @@ int main(void) {
     ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_mem_obj);
     ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_mem_obj);
     ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_mem_obj);
+    ret = clSetKernelArg(kernel, 3, sizeof(int), (void *)h_no_sensors);
  
     // Execute the OpenCL kernel on the list
     size_t global_item_size = LIST_SIZE; // Process the entire lists
-    size_t local_item_size = 64; // Divide work items into groups of 64
+    size_t local_item_size = 67; // Divide work items into groups of 64
     ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, 
             &global_item_size, &local_item_size, 0, NULL, NULL);
  
@@ -87,9 +146,10 @@ int main(void) {
             LIST_SIZE * sizeof(float), C, 0, NULL, NULL);
  
     // Display the result to the screen
-    for(i = 0; i < LIST_SIZE; i++)
-        printf("%f + %f = %f\n", A[i], B[i], C[i]);
- 
+    for(i = 0; i < LIST_SIZE; i++) {
+        printf("%f, %f, %f\n", A[i], B[i], C[i]);
+    }
+    
     // Clean up
     ret = clFlush(command_queue);
     ret = clFinish(command_queue);
@@ -105,3 +165,15 @@ int main(void) {
     free(C);
     return 0;
 }
+
+int main() {
+	char* c = "pixel-sft-event-0.dump"; // Dump file name
+	int size;                           // Size of the dump file
+	char* input;                        // content of the dump file
+	int i;
+		
+	readFile(c, &input, &size);
+    gpuLoad();
+    return 0;
+}
+
