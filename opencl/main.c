@@ -14,20 +14,25 @@
 #define VELO_MAX 40
 
 typedef struct cluster {
-    int position;
-    int num_elems;
+    int position;       // First index in the hits structure where the elements start
+    int num_elems;      // Number of elements inside this cluster
 } cluster;
 
-typedef struct hits {
+typedef struct hit_str {
     float x;
     float y;
     int z;
     //int id;   // Is the ID necessary during the calculation?
-} hits;
+} hit_str;
+
+struct link {
+    int index;
+    struct link* next;
+}link;
 
 cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 
-hits hit[1943]; // TODO hardcoded load dinamically
+hit_str hit[1943]; // TODO hardcoded load dinamically
 
 
 int* h_no_sensors;
@@ -92,11 +97,24 @@ void readFile(char* filename, char** input, int* size){
 
 /** Sort hits according the the position inside the cluster.
  * Save the 
+ * This approach cannot be used inside the Device because function malloc cannot
+ * be used inside.
  */
 void sortHits() {
     int max = INT_MIN;
-    int i;
-    int *list;
+    int i, j, k;
+    int *list;  // List where will me stored the hits per panel
+    int row, cols;   // Calculated row and column
+    int count;  // counter of the number of elements of the hits of a panel
+    
+    struct elem_cluster{
+        int row;    // index of the row in the final cluster structer
+        int column;  // index of the column in the final cluster structer
+        int hit_index;  // Save the index to acces later
+        struct elem_cluster *next;
+    } elem_cluster;
+    
+    struct elem_cluster *first, *last, *new, *current, *previous;
     
     for(i=0; i < *h_no_sensors; i++) {
         if (max < h_sensor_hitStarts[i]) {
@@ -104,11 +122,53 @@ void sortHits() {
         }
     }
     
+    // Reservar cada vez, no solo la primera
     list=malloc(max*sizeof(int));
     
     // TODO sort the elements in a bidimensional space
     
-    // TODO initialize the grid matrix
+    for(i=0; i < *h_no_sensors; i++) {
+    
+        list=malloc(h_sensor_hitNums[i]*sizeof(int));
+        count = 1;      // We didn't use any element of the list, still
+        
+        // Treat the element 0
+        first = (struct elem_cluster*) malloc( sizeof(struct elem_cluster));
+        last = first;
+        
+        
+        // Generate the struct
+        for(j=1; j < h_sensor_hitNums[i]; j++) {
+            // TODO Calculate the position inside the grid
+            // TODO create a data struct where save the position of the grid
+            
+            // TODO every time a data structue is insterted sort it
+            
+            new = (struct elem_cluster*) malloc( sizeof(struct elem_cluster));
+            
+
+            // Add the sruct inside the linked list
+            for(k=0; k < count; k++) {
+                // TODO check if the position is less or more
+                
+                // TODO if it's less than the current element, then introduce it before
+            
+                if(current->row * CLUSTER_COLS + current->column <= row * CLUSTER_COLS + cols ) {
+                    new->next = previous->next;
+                    previous->next = new;
+                    break;  // Go out of the loop
+                }
+                
+                if(current == last) {
+                    last->next = new;
+                    last = new;
+                }
+            }
+            count++;
+        }
+        // TODO pass the linked list to the array
+        // TODO free memory
+    }
 }
 
 /** Load the collision from a dump file.
@@ -138,6 +198,7 @@ int gpuLoad(void) {
     // Create the two input vectors
     int i;
     const int LIST_SIZE = *h_no_hits;
+
     float *A = (float*)malloc(sizeof(float)*LIST_SIZE);
     float *B = (float*)malloc(sizeof(float)*LIST_SIZE);
     for(i = 0; i < LIST_SIZE; i++) {
@@ -174,6 +235,15 @@ int gpuLoad(void) {
     // Create a command queue
     cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
  
+    // TODO
+    // Load grid
+    // Load hits ordered
+    // Load list for downward link and upward link
+    // Load list of number of hits per device
+    // Load list of the Z positions
+    // Load the total number of hits
+    
+    
     // Create memory buffers on the device for each vector 
     cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY, 
             LIST_SIZE * sizeof(float), NULL, &ret);
@@ -208,6 +278,10 @@ int gpuLoad(void) {
  
     checkError(ret, "Setting the arguments of the function");
     
+    /* TODO the number of threads doesn't has to be hardcoded.
+       the number of threads has to be related to the geometry, the number
+       of devices and the size of the grid.
+    */
     // Execute the OpenCL kernel on the list
     size_t global_item_size = LIST_SIZE; // Process the entire lists
     size_t local_item_size = 67; // Divide work items into groups of 64
@@ -245,6 +319,18 @@ int gpuLoad(void) {
 
 int main() {
 	int size;                           // Size of the dump file
+    
+    int i, j, k;
+    
+    // TODO consider initialization with memset
+    for(i=0; i < NUM_VELO; i++) {
+        for(j=0; j < CLUSTER_ROWS; j++) {
+            for(k=0; k < CLUSTER_COLS; k++) {
+                grid[i][j][k].position = -1;
+                grid[i][j][k].num_elems = -1;
+            }
+        }
+    }
     
 	loadCollision(&size);
     printf("Size %d\n",size);
