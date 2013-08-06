@@ -32,7 +32,7 @@ struct link {
 
 cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 
-hit_str hit[1943]; // TODO hardcoded, load dinamically
+hit_str hit_pos[1943]; // TODO hardcoded, load dinamically
 
 int* h_no_sensors;
 int* h_no_hits;
@@ -43,8 +43,6 @@ int* h_hit_IDs;
 float* h_hit_Xs;
 float* h_hit_Ys;
 int* h_hit_Zs;
-
-
 
 
 int sensors = 2;
@@ -126,6 +124,7 @@ void sortHits() {
         int row;    // index of the row in the final cluster structer
         int col;  // index of the column in the final cluster structer
         int hit_index;  // Save the index to acces later
+        int z;
         struct str_cluster *next;
     };
     
@@ -157,6 +156,7 @@ void sortHits() {
         first->row = row;
         first->col = col;
         first->hit_index = hit;
+        first->z = i;
         
         hit++;
 
@@ -172,6 +172,7 @@ void sortHits() {
             new->row = row;
             new->col = col;
             new->hit_index = hit;
+            new->z = i;
             new->next = NULL;
     
             printf("%d: (%d, %d)\n",j,row, col);
@@ -216,7 +217,24 @@ void sortHits() {
             count++;
         }
         
-        // TODO pass the linked list to the array and to the grid
+        current = first;
+        while(current != NULL) {
+            printf("%d %d\n",index, current->hit_index);
+            hit_pos[index].x = h_hit_Xs[current->hit_index];
+            hit_pos[index].y = h_hit_Ys[current->hit_index];
+            hit_pos[index].z = h_hit_Zs[current->hit_index];
+            
+            if(grid[current->z][current->row][current->col].position != -1) {
+                grid[current->z][current->row][current->col].position = index;
+            }
+            
+            grid[current->z][current->row][current->col].num_elems++;
+            
+            index++;
+            current = current->next;
+        }
+        
+
 
         current = first;
         printf("\n\n------------------------------\n");
@@ -227,7 +245,6 @@ void sortHits() {
             current = next;
         }
         printf("------------------------------\n\n");
-        index += h_sensor_hitNums[i];
     }
 }
 
@@ -457,7 +474,7 @@ int main() {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
                 grid[i][j][k].position = -1;
-                grid[i][j][k].num_elems = -1;
+                grid[i][j][k].num_elems = 0;
             }
         }
     }
