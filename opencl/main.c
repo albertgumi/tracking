@@ -10,8 +10,8 @@
 #define CLUSTER_COLS 50 // Constant number of columns for the cluster structure
 #define NUM_VELO 48     // Total number of VELO detectors
 
-#define VELO_MIN -40
-#define VELO_MAX 40
+#define VELO_MIN -40.0
+#define VELO_MAX 40.0
 
 typedef struct cluster {
     int position;       // First index in the hits structure where the elements start
@@ -32,8 +32,7 @@ struct link {
 
 cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 
-hit_str hit[1943]; // TODO hardcoded load dinamically
-
+hit_str hit[1943]; // TODO hardcoded, load dinamically
 
 int* h_no_sensors;
 int* h_no_hits;
@@ -44,6 +43,19 @@ int* h_hit_IDs;
 float* h_hit_Xs;
 float* h_hit_Ys;
 int* h_hit_Zs;
+
+
+
+
+int sensors = 2;
+int no_hits = 8;
+int sensor_hitStarts[] = {0,3};
+int sensor_hitNums[] = {3,5};
+int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
+float hit_Xs[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+float hit_Ys[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
+
 
 /** Read the dump file that contains the tracking information.
  *
@@ -92,82 +104,155 @@ void readFile(char* filename, char** input, int* size){
     printf("hit_Ys %f\n",h_hit_Ys);
     printf("hit_Zs %d\n",h_hit_Zs);
 #endif
-
 }
 
-/** Sort hits according the the position inside the cluster.
+/** 
+ * Sort hits according the the position inside the cluster.
  * Save the 
  * This approach cannot be used inside the Device because function malloc cannot
  * be used inside.
  */
 void sortHits() {
-    int max = INT_MIN;
+
     int i, j, k;
-    int *list;  // List where will me stored the hits per panel
-    int row, cols;   // Calculated row and column
+    int row, col;   // Calculated row and column
     int count;  // counter of the number of elements of the hits of a panel
+    int hit = 0;
+
+    int index = 0;
     
-    struct elem_cluster{
+    // Temporal structure to sort the hits
+    struct str_cluster{
         int row;    // index of the row in the final cluster structer
-        int column;  // index of the column in the final cluster structer
+        int col;  // index of the column in the final cluster structer
         int hit_index;  // Save the index to acces later
-        struct elem_cluster *next;
-    } elem_cluster;
+        struct str_cluster *next;
+    };
     
-    struct elem_cluster *first, *last, *new, *current, *previous;
+    struct str_cluster *first, *new, *current, *previous, *next;
     
+    
+    float cluster_row_size = (-VELO_MIN + VELO_MAX) / CLUSTER_ROWS;
+    float cluster_col_size = (-VELO_MIN + VELO_MAX) / CLUSTER_COLS;
+    
+    
+    
+    // Iterate over the sensors
     for(i=0; i < *h_no_sensors; i++) {
-        if (max < h_sensor_hitStarts[i]) {
-            max = h_sensor_hitStarts[i];
-        }
-    }
-    
-    // Reservar cada vez, no solo la primera
-    list=malloc(max*sizeof(int));
-    
-    // TODO sort the elements in a bidimensional space
-    
-    for(i=0; i < *h_no_sensors; i++) {
-    
-        list=malloc(h_sensor_hitNums[i]*sizeof(int));
+
+        printf("\n\n=======Sensor %d=============\n",i);
+        
+        // Create a list to sort the elements of the current panel
+        
         count = 1;      // We didn't use any element of the list, still
         
         // Treat the element 0
-        first = (struct elem_cluster*) malloc( sizeof(struct elem_cluster));
-        last = first;
-        
-        
-        // Generate the struct
-        for(j=1; j < h_sensor_hitNums[i]; j++) {
-            // TODO Calculate the position inside the grid
-            // TODO create a data struct where save the position of the grid
-            
-            // TODO every time a data structue is insterted sort it
-            
-            new = (struct elem_cluster*) malloc( sizeof(struct elem_cluster));
-            
+        first = (struct str_cluster*) malloc( sizeof(struct str_cluster));
 
-            // Add the sruct inside the linked list
-            for(k=0; k < count; k++) {
-                // TODO check if the position is less or more
-                
-                // TODO if it's less than the current element, then introduce it before
+        // calculate the row and column inside the grid
+        row = (int) ((-VELO_MIN + h_hit_Xs[hit])/cluster_row_size);
+        col = (int) ((-VELO_MIN + h_hit_Ys[hit])/cluster_col_size);
+        
+        first->next = NULL;
+        first->row = row;
+        first->col = col;
+        first->hit_index = hit;
+        
+        hit++;
+
+        // Iterate over the hits of the sensor
+        for(j=1; j < h_sensor_hitNums[i]; j++, hit++) {
+
+            new = (struct str_cluster*) malloc( sizeof(struct str_cluster));
+
+            // calculate the row and column inside the grid
+            row = (int) ((-VELO_MIN + h_hit_Xs[hit])/cluster_row_size);
+            col = (int) ((-VELO_MIN + h_hit_Ys[hit])/cluster_col_size);
+        
+            new->row = row;
+            new->col = col;
+            new->hit_index = hit;
+            new->next = NULL;
+    
+            printf("%d: (%d, %d)\n",j,row, col);
             
-                if(current->row * CLUSTER_COLS + current->column <= row * CLUSTER_COLS + cols ) {
-                    new->next = previous->next;
-                    previous->next = new;
-                    break;  // Go out of the loop
+            previous = NULL;
+            current = first;    // We are going to iterate over the list starting from the first element
+            
+            // Add the sruct inside the linked list
+            // sort the elements in a bidimensional space
+            for(k=0; k < count; k++) {
+
+                if(current == first)  {
+                    if((first->row * CLUSTER_COLS + first->col) >= (row * CLUSTER_COLS + col )) {
+                        //printf("\t(%d,%d) is more than (%d,%d), ID: %d\n", first->row, first->col,row, col, h_hit_IDs[j]);
+                        new->next = current;
+                        first = new;
+                        //printf("\nA) New first %d\n",h_hit_IDs[j]);
+                        break;
+                    }
+                } else {
+                    if((current->row * CLUSTER_COLS + current->col) > (row * CLUSTER_COLS + col )) {
+                        //printf("\t(%d,%d) is more than (%d,%d), ID: %d\n", current->row, current->col,row, col, h_hit_IDs[j]);
+
+                        new->next = current;
+                        if(current == first) {
+                            //printf("\nB) New first %d\n",h_hit_IDs[j]);
+                            new = first;
+                        } else {
+                            previous->next = new;
+                        }
+                        break;  // Go out of the loop
+                    }
+                } 
+                
+                if(k == count - 1) {
+                    current->next = new;
                 }
                 
-                if(current == last) {
-                    last->next = new;
-                    last = new;
-                }
+                previous = current;
+                current = current->next;
             }
             count++;
         }
-        // TODO pass the linked list to the array
-        // TODO free memory
+        
+        // TODO pass the linked list to the array and to the grid
+
+        current = first;
+        printf("\n\n------------------------------\n");
+        while(current != NULL) {
+            printf("\tFREE: (%d,%d) %d\n",current->row, current->col, current->hit_index);
+            next = current->next;
+            free(current);
+            current = next;
+        }
+        printf("------------------------------\n\n");
+        index += h_sensor_hitNums[i];
+    }
+}
+
+void printDataDump() {
+/*
+int* h_no_sensors;
+int* h_no_hits;
+int* h_sensor_Zs;
+int* h_sensor_hitStarts;
+int* h_sensor_hitNums;
+int* h_hit_IDs;
+float* h_hit_Xs;
+float* h_hit_Ys;
+int* h_hit_Zs;
+
+*/
+    int i, j;
+    int id =0;
+    
+    printf("========No sensors: %d, No hits %d==========\n",*h_no_sensors,*h_no_hits);
+    for(i=0; i < *h_no_sensors; i++) {
+        printf("\t---------Num hits sensor %d: %d, hits start: %d ------------\n",i,h_sensor_hitNums[i], h_sensor_hitStarts[i]);
+        for(j=0; j< h_sensor_hitNums[i]; j++, id++) {
+            printf("\t\t(%f,%f,%d) - %d\n",h_hit_Xs[id],h_hit_Ys[id],h_hit_Zs[id],h_hit_IDs[id]);
+        }
     }
 }
 
@@ -185,6 +270,50 @@ void loadCollision(int* size) {
 	readFile(dumpFile,&input, size);
 
     printf("Size %d\n",*size);
+}
+
+inline void loadFalseData() {
+
+    /*
+    int sensors = 2;
+    h_no_sensors = &sensors;
+    
+    printf("%d\n",*h_no_sensors); 
+      
+    int no_hits = 8;
+    h_no_hits = &no_hits;
+    
+    int sensor_hitStarts[] = {0,3};
+    h_sensor_hitStarts = sensor_hitStarts;
+    
+    int sensor_hitNums[] = {3,5};
+    h_sensor_hitNums = sensor_hitNums;
+    
+    
+    int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
+    h_hit_IDs = hit_IDs;
+    
+    float hit_Xs[] = {-39.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+    h_hit_Xs = hit_Xs;
+    
+    float hit_Ys[] = {-39.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+    h_hit_Ys = hit_Ys;
+    
+    int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
+    h_hit_Zs = hit_Zs;
+    
+    */
+    
+    h_no_sensors = &sensors;
+    h_no_hits = &no_hits;
+    h_sensor_hitStarts = sensor_hitStarts;
+    
+    h_sensor_hitNums = sensor_hitNums;
+    h_hit_IDs = hit_IDs;
+    
+    h_hit_Xs = hit_Xs;
+    h_hit_Ys = hit_Ys;
+    h_hit_Zs = hit_Zs;
 }
 
 void checkError(int retValue, char *msg) {
@@ -317,6 +446,7 @@ int gpuLoad(void) {
     return 0;
 }
 
+
 int main() {
 	int size;                           // Size of the dump file
     
@@ -332,9 +462,16 @@ int main() {
         }
     }
     
+    //loadFalseData();
 	loadCollision(&size);
-    printf("Size %d\n",size);
-    gpuLoad();
+    //printf("Size %d\n",size);
+    
+    
+    //printDataDump();
+    
+    sortHits();
+    
+    //gpuLoad();
 
     return 0;
 }
