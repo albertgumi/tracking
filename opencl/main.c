@@ -8,7 +8,13 @@
 #define MAX_SOURCE_SIZE (0x100000)
 #define CLUSTER_ROWS 50 // Constant number of rows for the cluster structure
 #define CLUSTER_COLS 50 // Constant number of columns for the cluster structure
-#define NUM_VELO 48     // Total number of VELO detectors
+
+#ifdef DEBUG
+    #define NUM_VELO 2
+#else
+    #define NUM_VELO 48     // Total number of VELO detectors
+#endif
+
 
 #define VELO_MIN -40.0
 #define VELO_MAX 40.0
@@ -30,9 +36,18 @@ struct link {
     struct link* next;
 }link;
 
+
+typedef struct downup_str {
+    int down;
+    int up;
+} downup_str;
+
+
+
 cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 
-hit_str hit_pos[1943]; // TODO hardcoded, load dinamically
+downup_str *downup;
+hit_str *hit_pos;
 
 int* h_no_sensors;
 int* h_no_hits;
@@ -44,15 +59,16 @@ float* h_hit_Xs;
 float* h_hit_Ys;
 int* h_hit_Zs;
 
-
-int sensors = 2;
-int no_hits = 8;
-int sensor_hitStarts[] = {0,3};
-int sensor_hitNums[] = {3,5};
-int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
-float hit_Xs[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-float hit_Ys[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
+#ifdef DEBUG
+    int sensors = 2;
+    int no_hits = 8;
+    int sensor_hitStarts[] = {0,3};
+    int sensor_hitNums[] = {3,5};
+    int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
+    float hit_Xs[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+    float hit_Ys[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
+    int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
+#endif
 
 
 /** Read the dump file that contains the tracking information.
@@ -90,17 +106,17 @@ void readFile(char* filename, char** input, int* size){
 	h_hit_Ys = (float*) (h_hit_Xs + h_no_hits[0]);
 	h_hit_Zs = (int*) (h_hit_Ys + h_no_hits[0]);
 
-    printf("no_hits %d\n",*h_no_hits);
 #ifdef DEBUG
-    printf("h_no_sensors %d\n",h_no_sensors);
-    printf("no_hits %d\n",h_no_hits);
-    printf("sensor_Zs %d\n",&h_sensor_Zs);
-    printf("sensor_hitStarts %d\n",h_sensor_hitStarts);
-    printf("sensor_hitNums %d\n",h_sensor_hitNums);
-    printf("hit_IDs %d\n",h_hit_IDs);
-    printf("hit_Xs %f\n",h_hit_Xs);
-    printf("hit_Ys %f\n",h_hit_Ys);
-    printf("hit_Zs %d\n",h_hit_Zs);
+    printf("no_hits %d\n",*h_no_hits);
+    printf("h_no_sensors %d\n",*h_no_sensors);
+    printf("no_hits %d\n",*h_no_hits);
+    printf("sensor_Zs %d\n",h_sensor_Zs[0]);
+    printf("sensor_hitStarts %d\n",h_sensor_hitStarts[0]);
+    printf("sensor_hitNums %d\n",h_sensor_hitNums[0]);
+    printf("hit_IDs %d\n",h_hit_IDs[0]);
+    printf("hit_Xs %f\n",h_hit_Xs[0]);
+    printf("hit_Ys %f\n",h_hit_Ys[0]);
+    printf("hit_Zs %d\n",h_hit_Zs[0]);
 #endif
 }
 
@@ -139,7 +155,7 @@ void sortHits() {
     // Iterate over the sensors
     for(i=0; i < *h_no_sensors; i++) {
 
-        printf("\n\n=======Sensor %d=============\n",i);
+        //printf("\n\n=======Sensor %d=============\n",i);
         
         // Create a list to sort the elements of the current panel
         
@@ -175,7 +191,7 @@ void sortHits() {
             new->z = i;
             new->next = NULL;
     
-            printf("%d: (%d, %d)\n",j,row, col);
+            //printf("%d: (%d, %d)\n",j,row, col);
             
             previous = NULL;
             current = first;    // We are going to iterate over the list starting from the first element
@@ -219,12 +235,12 @@ void sortHits() {
         
         current = first;
         while(current != NULL) {
-            printf("%d %d\n",index, current->hit_index);
+            //printf("%d %d\n",index, current->hit_index);
             hit_pos[index].x = h_hit_Xs[current->hit_index];
             hit_pos[index].y = h_hit_Ys[current->hit_index];
             hit_pos[index].z = h_hit_Zs[current->hit_index];
             
-            if(grid[current->z][current->row][current->col].position != -1) {
+            if(grid[current->z][current->row][current->col].position == -1) {
                 grid[current->z][current->row][current->col].position = index;
             }
             
@@ -248,19 +264,24 @@ void sortHits() {
     }
 }
 
-void printDataDump() {
-/*
-int* h_no_sensors;
-int* h_no_hits;
-int* h_sensor_Zs;
-int* h_sensor_hitStarts;
-int* h_sensor_hitNums;
-int* h_hit_IDs;
-float* h_hit_Xs;
-float* h_hit_Ys;
-int* h_hit_Zs;
+void printGrid() {
 
-*/
+    int i, j, k;
+     
+     
+    for(i=0; i < NUM_VELO; i++) {
+        for(j=0; j < CLUSTER_ROWS; j++) {
+            for(k=0; k < CLUSTER_COLS; k++) {
+                printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i][j][k].position,grid[i][j][k].num_elems);
+            }
+        }
+        printf("\n");
+    }
+}
+
+
+void printDataDump() {
+
     int i, j;
     int id =0;
     
@@ -289,49 +310,22 @@ void loadCollision(int* size) {
     printf("Size %d\n",*size);
 }
 
+
+#ifdef DEBUG
 inline void loadFalseData() {
 
-    /*
-    int sensors = 2;
-    h_no_sensors = &sensors;
-    
-    printf("%d\n",*h_no_sensors); 
-      
-    int no_hits = 8;
-    h_no_hits = &no_hits;
-    
-    int sensor_hitStarts[] = {0,3};
-    h_sensor_hitStarts = sensor_hitStarts;
-    
-    int sensor_hitNums[] = {3,5};
-    h_sensor_hitNums = sensor_hitNums;
-    
-    
-    int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
-    h_hit_IDs = hit_IDs;
-    
-    float hit_Xs[] = {-39.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-    h_hit_Xs = hit_Xs;
-    
-    float hit_Ys[] = {-39.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-    h_hit_Ys = hit_Ys;
-    
-    int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
-    h_hit_Zs = hit_Zs;
-    
-    */
     
     h_no_sensors = &sensors;
     h_no_hits = &no_hits;
     h_sensor_hitStarts = sensor_hitStarts;
-    
     h_sensor_hitNums = sensor_hitNums;
     h_hit_IDs = hit_IDs;
-    
     h_hit_Xs = hit_Xs;
     h_hit_Ys = hit_Ys;
     h_hit_Zs = hit_Zs;
 }
+#endif
+
 
 void checkError(int retValue, char *msg) {
     if(retValue != 0) {
@@ -357,7 +351,7 @@ int gpuLoad(void) {
     char *source_str;
     size_t source_size;
  
-    fp = fopen("hits_finder.cl", "r");
+    fp = fopen("kernel.cl", "r");
     if (!fp) {
         fprintf(stderr, "Failed to load kernel.\n");
         exit(1);
@@ -380,7 +374,7 @@ int gpuLoad(void) {
  
     // Create a command queue
     cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
- 
+
     // TODO
     // Load grid
     // Load hits ordered
@@ -465,7 +459,6 @@ int gpuLoad(void) {
 
 
 int main() {
-	int size;                           // Size of the dump file
     
     int i, j, k;
     
@@ -478,17 +471,25 @@ int main() {
             }
         }
     }
-    
-    //loadFalseData();
+
+#ifndef DEBUG
+	int size;                           // Size of the dump file
 	loadCollision(&size);
-    //printf("Size %d\n",size);
+#else
+    loadFalseData();
+#endif
     
-    
-    //printDataDump();
+    hit_pos = (hit_str*) malloc(*h_no_hits * sizeof(hit_str));
+    downup = (downup_str*) malloc(*h_no_hits * sizeof(downup_str));
     
     sortHits();
-    
-    //gpuLoad();
+
+#ifdef DEBUG
+    printDataDump();
+    //printGrid();
+#endif
+
+    gpuLoad();
 
     return 0;
 }
