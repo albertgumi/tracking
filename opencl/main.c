@@ -4,6 +4,7 @@
 #include <CL/cl.h>
 
 #include "definitions.h"
+#include "error.h"
 
 #define MAX_SOURCE_SIZE (0x100000)
 #define CLUSTER_ROWS 50 // Constant number of rows for the cluster structure
@@ -253,14 +254,14 @@ void sortHits() {
 
 
         current = first;
-        printf("\n\n------------------------------\n");
+        //printf("\n\n------------------------------\n");
         while(current != NULL) {
-            printf("\tFREE: (%d,%d) %d\n",current->row, current->col, current->hit_index);
+            //printf("\tFREE: (%d,%d) %d\n",current->row, current->col, current->hit_index);
             next = current->next;
             free(current);
             current = next;
         }
-        printf("------------------------------\n\n");
+        //printf("------------------------------\n\n");
     }
 }
 
@@ -329,7 +330,8 @@ inline void loadFalseData() {
 
 void checkError(int retValue, char *msg) {
     if(retValue != 0) {
-        fprintf(stderr, "Error: %s\n", msg);
+        printErrorByCode(retValue);
+        fprintf(stderr, "Error %d: %s\n",retValue, msg);
         exit(-1);
     }
 }
@@ -369,6 +371,7 @@ int gpuLoad(void) {
     ret = clGetDeviceIDs( platform_id, CL_DEVICE_TYPE_DEFAULT, 1, 
             &device_id, &ret_num_devices);
  
+    checkError(ret, "Get device ID");
     // Create an OpenCL context
     cl_context context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
  
@@ -379,11 +382,31 @@ int gpuLoad(void) {
     // Load grid
     // Load hits ordered
     // Load list for downward link and upward link
-    // Load list of number of hits per device
-    // Load list of the Z positions
+    // Load list of number of hits per device?
+    // Load list of the Z positions?
     // Load the total number of hits
-    
-    
+
+
+    // Grid structure
+    cl_mem grid_obj = clCreateBuffer(context, CL_MEM_READ_ONLY, 
+            NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS * sizeof(cluster), NULL, &ret);
+    // Hit structure
+    cl_mem hits_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
+            *h_no_hits * sizeof(hit_str), NULL, &ret);
+    // Down-up structure
+    cl_mem downup_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
+            *h_no_hits * sizeof(downup_str), NULL, &ret);
+
+
+    // Copy the lists A and B to their respective memory buffers
+    ret = clEnqueueWriteBuffer(command_queue, grid_obj, CL_TRUE, 0,
+            NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS * sizeof(cluster), hit_pos, 0, NULL, NULL);
+    ret |= clEnqueueWriteBuffer(command_queue, hits_obj, CL_TRUE, 0, 
+            *h_no_hits * sizeof(hit_str), hit_pos, 0, NULL, NULL);
+    //ret |= clEnqueueWriteBuffer(command_queue, c_mem_obj, CL_TRUE, 0,
+    //        *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
+
+/*
     // Create memory buffers on the device for each vector 
     cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY, 
             LIST_SIZE * sizeof(float), NULL, &ret);
@@ -391,13 +414,13 @@ int gpuLoad(void) {
             LIST_SIZE * sizeof(float), NULL, &ret);
     cl_mem c_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
             LIST_SIZE * sizeof(float), NULL, &ret);
- 
+
     // Copy the lists A and B to their respective memory buffers
     ret = clEnqueueWriteBuffer(command_queue, a_mem_obj, CL_TRUE, 0,
             LIST_SIZE * sizeof(float), h_hit_Xs, 0, NULL, NULL);
     ret = clEnqueueWriteBuffer(command_queue, b_mem_obj, CL_TRUE, 0, 
             LIST_SIZE * sizeof(float), B, 0, NULL, NULL);
- 
+*/ 
     checkError(ret, "Copying from device to host");
     
     // Create a program from the kernel source
@@ -407,14 +430,16 @@ int gpuLoad(void) {
     // Build the program
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
  
+    checkError(ret, "Building program");
+    
     // Create the OpenCL kernel
     cl_kernel kernel = clCreateKernel(program, "vector_add", &ret);
  
     // Set the arguments of the kernel
-    ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_mem_obj);
-    ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_mem_obj);
-    ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_mem_obj);
-    ret = clSetKernelArg(kernel, 3, sizeof(int), (void *)h_no_sensors);
+    ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&grid_obj);
+    ret |= clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&hits_obj);
+    ret |= clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&downup_obj);
+    ret |= clSetKernelArg(kernel, 3, sizeof(int), (void *)h_no_sensors);
  
     checkError(ret, "Setting the arguments of the function");
     
@@ -423,31 +448,35 @@ int gpuLoad(void) {
        of devices and the size of the grid.
     */
     // Execute the OpenCL kernel on the list
-    size_t global_item_size = LIST_SIZE; // Process the entire lists
-    size_t local_item_size = 67; // Divide work items into groups of 64
+    size_t global_item_size = 2048; // Process the entire lists
+    size_t local_item_size = 64; // Divide work items into groups of 64
     ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, 
             &global_item_size, &local_item_size, 0, NULL, NULL);
- 
+
+    checkError(ret, "Enqueue ND Range Kernel"); 
     // Read the memory buffer C on the device to the local variable C
     float *C = (float*)malloc(sizeof(float)*LIST_SIZE);
-    ret = clEnqueueReadBuffer(command_queue, c_mem_obj, CL_TRUE, 0, 
-            LIST_SIZE * sizeof(float), C, 0, NULL, NULL);
+    ret = clEnqueueReadBuffer(command_queue, downup_obj, CL_TRUE, 0, 
+            *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
 
+    checkError(ret, "Enqueue read buffer");
+    
     // Display the result to the screen
-    for(i = 0; i < LIST_SIZE; i++) {
-        //printf("%f, %f, %f\n", A[i], B[i], C[i]);
+    for(i = 0; i < *h_no_hits; i++) {
+    //for(i = 0; i < 5; i++) {
+        printf("%d (%d,%d)\n",i,downup[i].down, downup[i].up);
     }
     
     // Clean up
     ret = clFlush(command_queue);
-    ret = clFinish(command_queue);
-    ret = clReleaseKernel(kernel);
-    ret = clReleaseProgram(program);
-    ret = clReleaseMemObject(a_mem_obj);
-    ret = clReleaseMemObject(b_mem_obj);
-    ret = clReleaseMemObject(c_mem_obj);
-    ret = clReleaseCommandQueue(command_queue);
-    ret = clReleaseContext(context);
+    ret |= clFinish(command_queue);
+    ret |= clReleaseKernel(kernel);
+    ret |= clReleaseProgram(program);
+    ret |= clReleaseMemObject(grid_obj);
+    ret |= clReleaseMemObject(hits_obj);
+    ret |= clReleaseMemObject(downup_obj);
+    ret |= clReleaseCommandQueue(command_queue);
+    ret |= clReleaseContext(context);
     
     checkError(ret, "Releasing variables");
 
