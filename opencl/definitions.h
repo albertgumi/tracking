@@ -50,6 +50,7 @@
 #define I_COLS 4
 
 
+
 struct Sensor {
 	int z;
 	int hitStart;

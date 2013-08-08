@@ -45,7 +45,8 @@ typedef struct downup_str {
 
 
 
-cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
+//cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
+cluster grid[NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS];
 
 downup_str *downup;
 hit_str *hit_pos;
@@ -240,12 +241,19 @@ void sortHits() {
             hit_pos[index].x = h_hit_Xs[current->hit_index];
             hit_pos[index].y = h_hit_Ys[current->hit_index];
             hit_pos[index].z = h_hit_Zs[current->hit_index];
-            
+            /*
             if(grid[current->z][current->row][current->col].position == -1) {
                 grid[current->z][current->row][current->col].position = index;
             }
             
             grid[current->z][current->row][current->col].num_elems++;
+            */
+            
+            if(grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].position == -1) {
+                grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].position = index;
+            }
+            
+            grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].num_elems++;
             
             index++;
             current = current->next;
@@ -254,14 +262,14 @@ void sortHits() {
 
 
         current = first;
-        //printf("\n\n------------------------------\n");
+        printf("\n\n------------------------------\n");
         while(current != NULL) {
-            //printf("\tFREE: (%d,%d) %d\n",current->row, current->col, current->hit_index);
+            printf("\tFREE: (%d,%d) %d\n",current->row, current->col, current->hit_index);
             next = current->next;
             free(current);
             current = next;
         }
-        //printf("------------------------------\n\n");
+        printf("------------------------------\n\n");
     }
 }
 
@@ -273,7 +281,8 @@ void printGrid() {
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
-                printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i][j][k].position,grid[i][j][k].num_elems);
+                //printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i][j][k].position,grid[i][j][k].num_elems);
+                printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].position,grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].num_elems);
             }
         }
         printf("\n");
@@ -304,6 +313,7 @@ void loadCollision(int* size) {
 
     // TODO this file is hardcoded for development purposes
 	char* dumpFile = "../dump/pixel-sft-event-0.dump"; // Dump file name
+	//char* dumpFile = "../dump/collision_simple.dump"; // Dump file name
 	//int size;                           // Size of the dump file
 	char* input;
 	readFile(dumpFile,&input, size);
@@ -396,13 +406,18 @@ int gpuLoad(void) {
     // Down-up structure
     cl_mem downup_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
             *h_no_hits * sizeof(downup_str), NULL, &ret);
+    // Z list structure
+    cl_mem zlist_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
+            *h_no_sensors * sizeof(int), NULL, &ret);
 
 
-    // Copy the lists A and B to their respective memory buffers
+    // Copy the lists grid and hit structure to their respective memory buffers
     ret = clEnqueueWriteBuffer(command_queue, grid_obj, CL_TRUE, 0,
-            NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS * sizeof(cluster), hit_pos, 0, NULL, NULL);
+            NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS * sizeof(cluster), grid, 0, NULL, NULL);
     ret |= clEnqueueWriteBuffer(command_queue, hits_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(hit_str), hit_pos, 0, NULL, NULL);
+    ret |= clEnqueueWriteBuffer(command_queue, zlist_obj, CL_TRUE, 0, 
+            *h_no_sensors * sizeof(int), h_sensor_Zs, 0, NULL, NULL);
     //ret |= clEnqueueWriteBuffer(command_queue, c_mem_obj, CL_TRUE, 0,
     //        *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
 
@@ -439,7 +454,9 @@ int gpuLoad(void) {
     ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&grid_obj);
     ret |= clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&hits_obj);
     ret |= clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&downup_obj);
-    ret |= clSetKernelArg(kernel, 3, sizeof(int), (void *)h_no_sensors);
+    ret |= clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&zlist_obj);
+    ret |= clSetKernelArg(kernel, 4, sizeof(int), (void *)h_no_sensors);
+    ret |= clSetKernelArg(kernel, 5, sizeof(int), (void *)h_no_hits);
  
     checkError(ret, "Setting the arguments of the function");
     
@@ -467,6 +484,10 @@ int gpuLoad(void) {
         printf("%d (%d,%d)\n",i,downup[i].down, downup[i].up);
     }
     
+    for(i = 0; i < 48; i++) {
+        //printf("%d\n",h_sensor_Zs[i]);
+    }
+    
     // Clean up
     ret = clFlush(command_queue);
     ret |= clFinish(command_queue);
@@ -475,6 +496,7 @@ int gpuLoad(void) {
     ret |= clReleaseMemObject(grid_obj);
     ret |= clReleaseMemObject(hits_obj);
     ret |= clReleaseMemObject(downup_obj);
+    ret |= clReleaseMemObject(zlist_obj);
     ret |= clReleaseCommandQueue(command_queue);
     ret |= clReleaseContext(context);
     
@@ -495,8 +517,10 @@ int main() {
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
-                grid[i][j][k].position = -1;
-                grid[i][j][k].num_elems = 0;
+                //grid[i][j][k].position = -1;
+                //grid[i][j][k].num_elems = 0;
+                grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].position = -1;
+                grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].num_elems = 0;
             }
         }
     }
