@@ -10,12 +10,7 @@
 #define CLUSTER_ROWS 50 // Constant number of rows for the cluster structure
 #define CLUSTER_COLS 50 // Constant number of columns for the cluster structure
 
-#ifdef DEBUG
-    #define NUM_VELO 2
-#else
-    #define NUM_VELO 48     // Total number of VELO detectors
-#endif
-
+#define NUM_VELO 48     // Total number of VELO detectors
 
 #define VELO_MIN -40.0
 #define VELO_MAX 40.0
@@ -44,7 +39,6 @@ typedef struct downup_str {
 } downup_str;
 
 
-
 //cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 cluster grid[NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS];
 
@@ -60,18 +54,6 @@ int* h_hit_IDs;
 float* h_hit_Xs;
 float* h_hit_Ys;
 int* h_hit_Zs;
-
-#ifdef DEBUG
-    int sensors = 2;
-    int no_hits = 8;
-    int sensor_hitStarts[] = {0,3};
-    int sensor_hitNums[] = {3,5};
-    int hit_IDs[] = {0,1,2,3,4,5,6,7,8};
-    float hit_Xs[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-    float hit_Ys[] = {-37.9,30,-39.9,  0.0,0.1,-5.5,-5.4,39};
-    int hit_Zs[] = {-2,-2,-2, 0,0,0,0,0};
-#endif
-
 
 /** Read the dump file that contains the tracking information.
  *
@@ -108,7 +90,7 @@ void readFile(char* filename, char** input, int* size){
 	h_hit_Ys = (float*) (h_hit_Xs + h_no_hits[0]);
 	h_hit_Zs = (int*) (h_hit_Ys + h_no_hits[0]);
 
-#ifdef DEBUG
+/*
     printf("no_hits %d\n",*h_no_hits);
     printf("h_no_sensors %d\n",*h_no_sensors);
     printf("no_hits %d\n",*h_no_hits);
@@ -119,7 +101,7 @@ void readFile(char* filename, char** input, int* size){
     printf("hit_Xs %f\n",h_hit_Xs[0]);
     printf("hit_Ys %f\n",h_hit_Ys[0]);
     printf("hit_Zs %d\n",h_hit_Zs[0]);
-#endif
+*/
 }
 
 /** 
@@ -320,23 +302,6 @@ void loadCollision(int* size) {
 
     printf("Size %d\n",*size);
 }
-
-
-#ifdef DEBUG
-inline void loadFalseData() {
-
-    
-    h_no_sensors = &sensors;
-    h_no_hits = &no_hits;
-    h_sensor_hitStarts = sensor_hitStarts;
-    h_sensor_hitNums = sensor_hitNums;
-    h_hit_IDs = hit_IDs;
-    h_hit_Xs = hit_Xs;
-    h_hit_Ys = hit_Ys;
-    h_hit_Zs = hit_Zs;
-}
-#endif
-
 
 void checkError(int retValue, char *msg) {
     if(retValue != 0) {
@@ -539,22 +504,16 @@ int main() {
         }
     }
 
-#ifndef DEBUG
 	int size;                           // Size of the dump file
 	loadCollision(&size);
-#else
-    loadFalseData();
-#endif
     
     hit_pos = (hit_str*) malloc(*h_no_hits * sizeof(hit_str));
     downup = (downup_str*) malloc(*h_no_hits * sizeof(downup_str));
     
     sortHits();
 
-#ifdef DEBUG
-    printDataDump();
+    //printDataDump();
     //printGrid();
-#endif
 
     gpuLoad();
 
