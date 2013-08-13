@@ -16,14 +16,6 @@ typedef struct downup_str {
 
 
 #define ABS(num) { if(num < 0.0) {return -num;} return num}
-/*
-inline float abs(float num) {
-    if(num < 0.0) {
-        return -num;
-    }
-    return num;
-}
-*/
 
 float Abs(float num) {
     if(num < 0.0) {
@@ -105,22 +97,13 @@ __kernel void vector_add(
             // Iterate over the 9 grids of the cluster
             for(i = start_row; i <= (row+1) && i < CLUSTER_ROWS; i++) {
             
-                //down_id = 3;
-                //up_id = 3;
-                    
                 for(j = start_col; j <= (col+1) && j < CLUSTER_COLS; j++) {
                 
                     // We consider first the downwards
                     i_down_grid = (z_index-1)*CLUSTER_ROWS*CLUSTER_COLS + i*CLUSTER_COLS + j;
                     
-                    //down_id = 2;
-                    //up_id = 2;
-                    
                     if(grid[i_down_grid].position != -1) {  // If there is a hit we go inside
                     
-                        //down_id = 1;
-                        //up_id = 1;
-                        
                         for(k = grid[i_down_grid].position; k < (grid[i_down_grid].num_elems + grid[i_down_grid].position); k++) {
                             // Calculate the slope 
                             
@@ -129,24 +112,13 @@ __kernel void vector_add(
                             // m = (y2-y1)/(z2-z1)
                             tmp_slope_y_down = Abs(hit[k].y-hit[id].y)/Abs(hit[k].z-hit[id].z);
                             
-                            //down_id = -2;
-                            //up_id = -2;
-                            
                             // Iterate over the upward
                             for(l = start_row; l <= (row+1) && l < CLUSTER_ROWS; l++) {
                             
-                                //down_id = -3;
-                                //up_id = -3;
-                                    
                                 for(m = start_col; m <= (col+1) && m < CLUSTER_COLS; m++) {
                                     i_up_grid = (z_index+1)*CLUSTER_ROWS*CLUSTER_COLS + l*CLUSTER_COLS + m;
                                     
-                                    //down_id = -4;
-                                    //up_id = -4;
-                                         
                                     if(grid[i_up_grid].position != -1) {  // If there is a hit we go inside
-                                        //down_id = -5;
-                                        //up_id = -5;
                                         for(n = grid[i_up_grid].position; n < (grid[i_up_grid].num_elems + grid[i_up_grid].position); n++) {
                                         
                                             // TODO this access can be done once and save but we cannot use Malloc...
@@ -158,24 +130,18 @@ __kernel void vector_add(
                                             tmp_slope_y_up = (hit[n].y-hit[id].y)/(hit[n].z-hit[id].z);
 
                                             // TODO make it absolute value
-                                            //if(abs(tmp_slope_x_up - tmp_slope_x_down) +  abs(tmp_slope_y_up - tmp_slope_y_down) < min_slope) {
                                             sum = (tmp_slope_x_up - tmp_slope_x_down) + (tmp_slope_y_up - tmp_slope_y_down);
                                             
                                             down_id = hit[n].z;   // 2147483647 MAX_INT
                                             up_id = (hit[n].x-hit[id].x);
                                             
                                             if((tmp_slope_x_up - tmp_slope_x_down) + (tmp_slope_y_up - tmp_slope_y_down) < min_slope) {
+                                                // TODO write absolute values
                                                 min_slope = (tmp_slope_x_up - tmp_slope_x_down) +  (tmp_slope_y_up - tmp_slope_y_down);
                                                 
-                                                //min_slope = ABS(ABS(tmp_slope_x_up) - ABS(tmp_slope_x_down)) +  ABS(ABS(tmp_slope_y_up) - ABS(tmp_slope_y_down));
-                                                
-                                                
-                                                //a[id] = min_slope;
-                                                a[id] = hit[id].y;
-                                                down_id = hit[n].z;
-                                                up_id = hit[id].x;
-                                                //down_id = k;
-                                                //up_id = n;
+                                                a[id] = min_slope;
+                                                down_id = k;
+                                                up_id = n;
                                             }
                                         }
                                     }
@@ -185,18 +151,10 @@ __kernel void vector_add(
                     }
                 }
             }
-            
-            //down_id = grid[29*50+24].position;
-            //up_id = grid[29*50+24].num_elems;
-            //up_id = i_down_grid;
-            
-            //down_id = start_row ;
-            //up_id =start_col;
         } else {
             down_id = -1;
             up_id = -1;
         }
-
 
         downup[id].down = down_id;
         downup[id].up = up_id;

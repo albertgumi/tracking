@@ -32,7 +32,6 @@ struct link {
     struct link* next;
 }link;
 
-
 typedef struct downup_str {
     int down;
     int up;
@@ -293,7 +292,7 @@ void printDataDump() {
  */
 void loadCollision(int* size) {
 
-    // TODO this file is hardcoded for development purposes
+    // TODO this file is hardcoded for development purposes. Change this
 	//char* dumpFile = "../dump/pixel-sft-event-0.dump"; // Dump file name
 	char* dumpFile = "../dump/collision_straight.dump"; // Dump file name
 	//int size;                           // Size of the dump file
@@ -324,11 +323,9 @@ int gpuLoad(void) {
     }*/
     
     
-    for(i = 0; i < LIST_SIZE; i++) {
-        h_hit_Xs[i] = h_hit_Ys[i] = 0.0;
+    /*for(i = 0; i < LIST_SIZE; i++) {
         printf("(%f,%f,%d)\n",h_hit_Xs[i], h_hit_Ys[i],h_hit_Zs[i]);
-//        h_hit_Xs[i] = h_hit_Ys[i] = 0.0;
-    }
+    }*/
     
     // Load the kernel source code into the array source_str
     FILE *fp;
@@ -342,7 +339,7 @@ int gpuLoad(void) {
     }
     source_str = (char*)malloc(MAX_SOURCE_SIZE);
     source_size = fread( source_str, 1, MAX_SOURCE_SIZE, fp);
-    fclose( fp );
+    fclose(fp);
  
     // Get platform and device information
     cl_platform_id platform_id = NULL;
@@ -359,14 +356,6 @@ int gpuLoad(void) {
  
     // Create a command queue
     cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
-
-    // TODO
-    // Load grid
-    // Load hits ordered
-    // Load list for downward link and upward link
-    // Load list of number of hits per device?
-    // Load list of the Z positions?
-    // Load the total number of hits
 
 
     // Grid structure
