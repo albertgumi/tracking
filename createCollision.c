@@ -18,7 +18,9 @@ int main() {
                        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 
                        31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 
                        45, 46, 47};
-    int i;
+    int nums[] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+                  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+
     int pos[] = {1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
                  1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
                  1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
@@ -28,15 +30,16 @@ int main() {
     FILE *fp;
 
     fp=fopen(collision_file, "w");
-	
-    fwrite(&sensors, sizeof(int), 1, fp);
-    fwrite(&hits, sizeof(int), 1, fp);
-    fwrite(z_position, sizeof(int), sensors, fp);
-    fwrite(hitStarts, sizeof(int), sensors, fp);    // sensor Zs
-    fwrite(hitStarts, sizeof(int), sensors, fp);    // hit nums
+
+    fwrite(&sensors, sizeof(int), 1, fp);           // Num sensors
+    fwrite(&hits, sizeof(int), 1, fp);              // Num hits
+    fwrite(z_position, sizeof(int), sensors, fp);   // Sensors Z positions
+    fwrite(hitStarts, sizeof(int), sensors, fp);    // Hit starts index
+    fwrite(nums, sizeof(int), sensors, fp);         // hit nums
     fwrite(hitStarts, sizeof(int), sensors, fp);    // hit ids
-    fwrite(pos, sizeof(int), sensors, fp);
-    fwrite(pos, sizeof(int), sensors, fp);
-    fwrite(z_position, sizeof(int), sensors, fp);
+    fwrite(pos, sizeof(int), hits, fp);             // X
+    fwrite(pos, sizeof(int), hits, fp);             // Y
+    fwrite(z_position, sizeof(int), hits, fp);      // Z
     fclose(fp);
+
 }

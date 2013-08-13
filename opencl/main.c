@@ -276,7 +276,7 @@ void sortHits() {
 void printGrid() {
 
     int i, j, k;
-     
+
      
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
@@ -312,8 +312,8 @@ void printDataDump() {
 void loadCollision(int* size) {
 
     // TODO this file is hardcoded for development purposes
-	char* dumpFile = "../dump/pixel-sft-event-0.dump"; // Dump file name
-	//char* dumpFile = "../dump/collision_simple.dump"; // Dump file name
+	//char* dumpFile = "../dump/pixel-sft-event-0.dump"; // Dump file name
+	char* dumpFile = "../dump/collision_straight.dump"; // Dump file name
 	//int size;                           // Size of the dump file
 	char* input;
 	readFile(dumpFile,&input, size);
@@ -351,13 +351,20 @@ int gpuLoad(void) {
     int i;
     const int LIST_SIZE = *h_no_hits;
 
-    float *A = (float*)malloc(sizeof(float)*LIST_SIZE);
-    float *B = (float*)malloc(sizeof(float)*LIST_SIZE);
-    for(i = 0; i < LIST_SIZE; i++) {
+    float *A = (float*)malloc(sizeof(float)*LIST_SIZE); // TODO remove
+    float *B = (float*)malloc(sizeof(float)*LIST_SIZE); // TODO remove
+    /*for(i = 0; i < LIST_SIZE; i++) {
         A[i] = h_hit_Xs[i];
         B[i] = h_hit_Ys[i];
+    }*/
+    
+    
+    for(i = 0; i < LIST_SIZE; i++) {
+        h_hit_Xs[i] = h_hit_Ys[i] = 0.0;
+        printf("(%f,%f,%d)\n",h_hit_Xs[i], h_hit_Ys[i],h_hit_Zs[i]);
+//        h_hit_Xs[i] = h_hit_Ys[i] = 0.0;
     }
- 
+    
     // Load the kernel source code into the array source_str
     FILE *fp;
     char *source_str;
@@ -409,6 +416,9 @@ int gpuLoad(void) {
     // Z list structure
     cl_mem zlist_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
             *h_no_sensors * sizeof(int), NULL, &ret);
+    // A debug object TODO remove
+    cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
+            *h_no_sensors * sizeof(int), NULL, &ret);
 
 
     // Copy the lists grid and hit structure to their respective memory buffers
@@ -441,7 +451,7 @@ int gpuLoad(void) {
     // Create a program from the kernel source
     cl_program program = clCreateProgramWithSource(context, 1, 
             (const char **)&source_str, (const size_t *)&source_size, &ret);
- 
+
     // Build the program
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
  
@@ -457,6 +467,7 @@ int gpuLoad(void) {
     ret |= clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&zlist_obj);
     ret |= clSetKernelArg(kernel, 4, sizeof(int), (void *)h_no_sensors);
     ret |= clSetKernelArg(kernel, 5, sizeof(int), (void *)h_no_hits);
+    ret |= clSetKernelArg(kernel, 6, sizeof(cl_mem), (void *)&a_mem_obj);   // TODO remove
  
     checkError(ret, "Setting the arguments of the function");
     
@@ -475,13 +486,15 @@ int gpuLoad(void) {
     float *C = (float*)malloc(sizeof(float)*LIST_SIZE);
     ret = clEnqueueReadBuffer(command_queue, downup_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
+    ret = clEnqueueReadBuffer(command_queue, a_mem_obj, CL_TRUE, 0, 
+            *h_no_hits * sizeof(float), A, 0, NULL, NULL);  // TODO remove
 
     checkError(ret, "Enqueue read buffer");
     
     // Display the result to the screen
     for(i = 0; i < *h_no_hits; i++) {
     //for(i = 0; i < 5; i++) {
-        printf("%d (%d,%d)\n",i,downup[i].down, downup[i].up);
+        printf("%d (%d,%d) A(%f)\n",i,downup[i].down, downup[i].up,A[i]);
     }
     
     for(i = 0; i < 48; i++) {
@@ -496,6 +509,7 @@ int gpuLoad(void) {
     ret |= clReleaseMemObject(grid_obj);
     ret |= clReleaseMemObject(hits_obj);
     ret |= clReleaseMemObject(downup_obj);
+    ret |= clReleaseMemObject(a_mem_obj); // TODO remove
     ret |= clReleaseMemObject(zlist_obj);
     ret |= clReleaseCommandQueue(command_queue);
     ret |= clReleaseContext(context);
