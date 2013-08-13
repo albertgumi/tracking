@@ -21,7 +21,7 @@ int main() {
     int nums[] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
                   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
-    int pos[] = {1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
+    float pos[] = {1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
                  1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
                  1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,1.1,
                  1.1,1.1,1.1};
@@ -37,8 +37,8 @@ int main() {
     fwrite(hitStarts, sizeof(int), sensors, fp);    // Hit starts index
     fwrite(nums, sizeof(int), sensors, fp);         // hit nums
     fwrite(hitStarts, sizeof(int), sensors, fp);    // hit ids
-    fwrite(pos, sizeof(int), hits, fp);             // X
-    fwrite(pos, sizeof(int), hits, fp);             // Y
+    fwrite(pos, sizeof(float), hits, fp);             // X
+    fwrite(pos, sizeof(float), hits, fp);             // Y
     fwrite(z_position, sizeof(int), hits, fp);      // Z
     fclose(fp);
 
