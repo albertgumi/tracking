@@ -234,6 +234,7 @@ void sortHits() {
                 grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].position = index;
             }
             
+            // TODO go back to 3D notation
             grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].num_elems++;
             
             index++;
@@ -316,16 +317,8 @@ int gpuLoad(void) {
     const int LIST_SIZE = *h_no_hits;
 
     float *A = (float*)malloc(sizeof(float)*LIST_SIZE); // TODO remove
-    float *B = (float*)malloc(sizeof(float)*LIST_SIZE); // TODO remove
-    /*for(i = 0; i < LIST_SIZE; i++) {
-        A[i] = h_hit_Xs[i];
-        B[i] = h_hit_Ys[i];
-    }*/
     
-    
-    /*for(i = 0; i < LIST_SIZE; i++) {
-        printf("(%f,%f,%d)\n",h_hit_Xs[i], h_hit_Ys[i],h_hit_Zs[i]);
-    }*/
+    int *start_hit = (int*)malloc(sizeof(int)*LIST_SIZE);
     
     // Load the kernel source code into the array source_str
     FILE *fp;
@@ -349,7 +342,7 @@ int gpuLoad(void) {
     cl_int ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
     ret = clGetDeviceIDs( platform_id, CL_DEVICE_TYPE_DEFAULT, 1, 
             &device_id, &ret_num_devices);
- 
+
     checkError(ret, "Get device ID");
     // Create an OpenCL context
     cl_context context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
@@ -372,6 +365,9 @@ int gpuLoad(void) {
             *h_no_sensors * sizeof(int), NULL, &ret);
     // A debug object TODO remove
     cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
+            *h_no_sensors * sizeof(float), NULL, &ret);
+    // Start hits array
+    cl_mem start_hit_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
             *h_no_sensors * sizeof(int), NULL, &ret);
 
 
@@ -382,24 +378,7 @@ int gpuLoad(void) {
             *h_no_hits * sizeof(hit_str), hit_pos, 0, NULL, NULL);
     ret |= clEnqueueWriteBuffer(command_queue, zlist_obj, CL_TRUE, 0, 
             *h_no_sensors * sizeof(int), h_sensor_Zs, 0, NULL, NULL);
-    //ret |= clEnqueueWriteBuffer(command_queue, c_mem_obj, CL_TRUE, 0,
-    //        *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
 
-/*
-    // Create memory buffers on the device for each vector 
-    cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY, 
-            LIST_SIZE * sizeof(float), NULL, &ret);
-    cl_mem b_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
-            LIST_SIZE * sizeof(float), NULL, &ret);
-    cl_mem c_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-            LIST_SIZE * sizeof(float), NULL, &ret);
-
-    // Copy the lists A and B to their respective memory buffers
-    ret = clEnqueueWriteBuffer(command_queue, a_mem_obj, CL_TRUE, 0,
-            LIST_SIZE * sizeof(float), h_hit_Xs, 0, NULL, NULL);
-    ret = clEnqueueWriteBuffer(command_queue, b_mem_obj, CL_TRUE, 0, 
-            LIST_SIZE * sizeof(float), B, 0, NULL, NULL);
-*/ 
     checkError(ret, "Copying from device to host");
     
     // Create a program from the kernel source
@@ -408,23 +387,54 @@ int gpuLoad(void) {
 
     // Build the program
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+    
+    // ------------Begin second kernel (FINDER)---------------------
+    checkError(ret, "Building program");
+    
+    // Create the OpenCL kernel
+    cl_kernel finder_kernel = clCreateKernel(program, "NeighborsFinder", &ret);
+ 
+    // Set the arguments of the kernel
+    ret = clSetKernelArg(finder_kernel, 0, sizeof(cl_mem), (void *)&grid_obj);
+    ret |= clSetKernelArg(finder_kernel, 1, sizeof(cl_mem), (void *)&hits_obj);
+    ret |= clSetKernelArg(finder_kernel, 2, sizeof(cl_mem), (void *)&downup_obj);
+    ret |= clSetKernelArg(finder_kernel, 3, sizeof(cl_mem), (void *)&zlist_obj);
+    ret |= clSetKernelArg(finder_kernel, 4, sizeof(int), (void *)h_no_sensors);
+    ret |= clSetKernelArg(finder_kernel, 5, sizeof(int), (void *)h_no_hits);
+    ret |= clSetKernelArg(finder_kernel, 6, sizeof(cl_mem), (void *)&a_mem_obj);   // TODO remove
+ 
+    checkError(ret, "Setting the arguments of the function");
+    // ------------ End second kernel (FINDER)---------------------
+
+
+    // ------------Begin second kernel (CLEANER)---------------------
+        
+    // Create the OpenCL kernel
+    cl_kernel cleaner_kernel = clCreateKernel(program, "NeighborsCleaner", &ret);
+ 
+    // Set the arguments of the kernel
+    ret = clSetKernelArg(cleaner_kernel, 0, sizeof(cl_mem), (void *)&downup_obj);
+    ret |= clSetKernelArg(cleaner_kernel, 1, sizeof(int), (void *)h_no_hits);
+ 
+    checkError(ret, "Setting the arguments of the function");
+    // ------------ End second kernel (CLEANER)---------------------
+
+
+    // ------------Begin second kernel (START HITS)---------------------
  
     checkError(ret, "Building program");
     
     // Create the OpenCL kernel
-    cl_kernel kernel = clCreateKernel(program, "vector_add", &ret);
+    cl_kernel start_hit_kernel = clCreateKernel(program, "StartHitsFinder", &ret);
  
     // Set the arguments of the kernel
-    ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&grid_obj);
-    ret |= clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&hits_obj);
-    ret |= clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&downup_obj);
-    ret |= clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&zlist_obj);
-    ret |= clSetKernelArg(kernel, 4, sizeof(int), (void *)h_no_sensors);
-    ret |= clSetKernelArg(kernel, 5, sizeof(int), (void *)h_no_hits);
-    ret |= clSetKernelArg(kernel, 6, sizeof(cl_mem), (void *)&a_mem_obj);   // TODO remove
+    ret |= clSetKernelArg(start_hit_kernel, 0, sizeof(cl_mem), (void *)&downup_obj);
+    ret |= clSetKernelArg(start_hit_kernel, 1, sizeof(cl_mem), (void *)&start_hit_obj);
+    ret |= clSetKernelArg(start_hit_kernel, 2, sizeof(int), (void *)h_no_sensors);
  
     checkError(ret, "Setting the arguments of the function");
-    
+    // ------------ End second kernel (START HITS)---------------------
+
     /* TODO the number of threads doesn't has to be hardcoded.
        the number of threads has to be related to the geometry, the number
        of devices and the size of the grid.
@@ -432,7 +442,14 @@ int gpuLoad(void) {
     // Execute the OpenCL kernel on the list
     size_t global_item_size = 2048; // Process the entire lists
     size_t local_item_size = 64; // Divide work items into groups of 64
-    ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, 
+    // Execute neighbour finder kernel
+    ret = clEnqueueNDRangeKernel(command_queue, finder_kernel, 1, NULL, 
+            &global_item_size, &local_item_size, 0, NULL, NULL);
+    // Execute cleaner kernel
+    ret |= clEnqueueNDRangeKernel(command_queue, cleaner_kernel, 1, NULL, 
+            &global_item_size, &local_item_size, 0, NULL, NULL);
+    // Execute start hit kernel
+    ret |= clEnqueueNDRangeKernel(command_queue, start_hit_kernel, 1, NULL, 
             &global_item_size, &local_item_size, 0, NULL, NULL);
 
     checkError(ret, "Enqueue ND Range Kernel"); 
@@ -442,32 +459,32 @@ int gpuLoad(void) {
             *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
     ret = clEnqueueReadBuffer(command_queue, a_mem_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(float), A, 0, NULL, NULL);  // TODO remove
+    ret = clEnqueueReadBuffer(command_queue, start_hit_obj, CL_TRUE, 0, 
+            *h_no_hits * sizeof(int), start_hit, 0, NULL, NULL);
 
     checkError(ret, "Enqueue read buffer");
     
     // Display the result to the screen
     for(i = 0; i < *h_no_hits; i++) {
-    //for(i = 0; i < 5; i++) {
-        printf("%d (%d,%d) A(%f)\n",i,downup[i].down, downup[i].up,A[i]);
-    }
-    
-    for(i = 0; i < 48; i++) {
-        //printf("%d\n",h_sensor_Zs[i]);
+        printf("%d (%d,%d) A(%f) SH(%d)\n",i,downup[i].down, downup[i].up,A[i],start_hit[i]);
     }
     
     // Clean up
     ret = clFlush(command_queue);
     ret |= clFinish(command_queue);
-    ret |= clReleaseKernel(kernel);
+    ret |= clReleaseKernel(finder_kernel);
+    ret |= clReleaseKernel(cleaner_kernel);
+    ret |= clReleaseKernel(start_hit_kernel);
     ret |= clReleaseProgram(program);
     ret |= clReleaseMemObject(grid_obj);
     ret |= clReleaseMemObject(hits_obj);
     ret |= clReleaseMemObject(downup_obj);
     ret |= clReleaseMemObject(a_mem_obj); // TODO remove
+    ret |= clReleaseMemObject(start_hit_obj);
     ret |= clReleaseMemObject(zlist_obj);
     ret |= clReleaseCommandQueue(command_queue);
     ret |= clReleaseContext(context);
-    
+
     checkError(ret, "Releasing variables");
 
     free(A);
@@ -485,8 +502,8 @@ int main() {
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
-                //grid[i][j][k].position = -1;
-                //grid[i][j][k].num_elems = 0;
+                //grid[i][j][k].position = -1; TODO go back
+                //grid[i][j][k].num_elems = 0; TODO go back
                 grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].position = -1;
                 grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].num_elems = 0;
             }

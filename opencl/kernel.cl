@@ -15,8 +15,6 @@ typedef struct downup_str {
 } downup_str;
 
 
-#define ABS(num) { if(num < 0.0) {return -num;} return num}
-
 float Abs(float num) {
     if(num < 0.0) {
         return -num;
@@ -25,7 +23,7 @@ float Abs(float num) {
 }
 
 
-__kernel void vector_add(
+__kernel void NeighborsFinder(
         __global const cluster      *grid, 
         __global const hit_str      *hit, 
         __global       downup_str   *downup, 
@@ -159,16 +157,13 @@ __kernel void vector_add(
         downup[id].down = down_id;
         downup[id].up = up_id;
     }
-    
-    //barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 }
 
 
 
-__kernel void neighbour_cleaner(
+__kernel void NeighborsCleaner(
         __global       downup_str   *downup, 
-                       int          hits,
-                       int          starthits) 
+                       int          hits) 
 {
 
     int id = get_global_id(0);
@@ -185,6 +180,25 @@ __kernel void neighbour_cleaner(
         if(downup[up].down != id) {
             downup[up].down = -1;
             downup[id].up = -1;
+        }
+    }
+}
+
+
+__kernel void StartHitsFinder(
+        __global       downup_str   *downup, 
+        __global       int          *start_hits, 
+                       int          hits)
+{
+
+    int id = get_global_id(0);
+    
+    if(id < hits) {
+    
+        if(downup[id].up != -1 && downup[id].down == -1) {
+            start_hits[id] = 1;
+        } else {
+            start_hits[id] = 0;
         }
     }
 }
