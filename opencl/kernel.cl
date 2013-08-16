@@ -133,6 +133,7 @@ __kernel void NeighborsFinder(
                                             down_id = hit[n].z;   // 2147483647 MAX_INT
                                             up_id = (hit[n].x-hit[id].x);
                                             
+                                            // TODO if the slope is over a minimum, it will mean that we cannot create a triplet, so we set -1
                                             if((tmp_slope_x_up - tmp_slope_x_down) + (tmp_slope_y_up - tmp_slope_y_down) < min_slope) {
                                                 // TODO write absolute values
                                                 min_slope = (tmp_slope_x_up - tmp_slope_x_down) +  (tmp_slope_y_up - tmp_slope_y_down);

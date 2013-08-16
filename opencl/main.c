@@ -38,8 +38,7 @@ typedef struct downup_str {
 } downup_str;
 
 
-//cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
-cluster grid[NUM_VELO*CLUSTER_ROWS*CLUSTER_COLS];
+cluster grid[NUM_VELO][CLUSTER_ROWS][CLUSTER_COLS];
 
 downup_str *downup;
 hit_str *hit_pos;
@@ -88,19 +87,6 @@ void readFile(char* filename, char** input, int* size){
 	h_hit_Xs = (float*) (h_hit_IDs + h_no_hits[0]);
 	h_hit_Ys = (float*) (h_hit_Xs + h_no_hits[0]);
 	h_hit_Zs = (int*) (h_hit_Ys + h_no_hits[0]);
-
-/*
-    printf("no_hits %d\n",*h_no_hits);
-    printf("h_no_sensors %d\n",*h_no_sensors);
-    printf("no_hits %d\n",*h_no_hits);
-    printf("sensor_Zs %d\n",h_sensor_Zs[0]);
-    printf("sensor_hitStarts %d\n",h_sensor_hitStarts[0]);
-    printf("sensor_hitNums %d\n",h_sensor_hitNums[0]);
-    printf("hit_IDs %d\n",h_hit_IDs[0]);
-    printf("hit_Xs %f\n",h_hit_Xs[0]);
-    printf("hit_Ys %f\n",h_hit_Ys[0]);
-    printf("hit_Zs %d\n",h_hit_Zs[0]);
-*/
 }
 
 /** 
@@ -218,24 +204,16 @@ void sortHits() {
         
         current = first;
         while(current != NULL) {
-            //printf("%d %d\n",index, current->hit_index);
             hit_pos[index].x = h_hit_Xs[current->hit_index];
             hit_pos[index].y = h_hit_Ys[current->hit_index];
             hit_pos[index].z = h_hit_Zs[current->hit_index];
-            /*
+            
             if(grid[current->z][current->row][current->col].position == -1) {
                 grid[current->z][current->row][current->col].position = index;
             }
             
             grid[current->z][current->row][current->col].num_elems++;
-            */
             
-            if(grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].position == -1) {
-                grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].position = index;
-            }
-            
-            // TODO go back to 3D notation
-            grid[current->z*CLUSTER_ROWS*CLUSTER_COLS+current->row*CLUSTER_COLS+current->col].num_elems++;
             
             index++;
             current = current->next;
@@ -255,6 +233,19 @@ void sortHits() {
     }
 }
 
+void printDumpHeads() {
+    printf("no_hits %d\n",*h_no_hits);
+    printf("h_no_sensors %d\n",*h_no_sensors);
+    printf("no_hits %d\n",*h_no_hits);
+    printf("sensor_Zs %d\n",h_sensor_Zs[0]);
+    printf("sensor_hitStarts %d\n",h_sensor_hitStarts[0]);
+    printf("sensor_hitNums %d\n",h_sensor_hitNums[0]);
+    printf("hit_IDs %d\n",h_hit_IDs[0]);
+    printf("hit_Xs %f\n",h_hit_Xs[0]);
+    printf("hit_Ys %f\n",h_hit_Ys[0]);
+    printf("hit_Zs %d\n",h_hit_Zs[0]);
+}
+
 void printGrid() {
 
     int i, j, k;
@@ -263,8 +254,7 @@ void printGrid() {
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
-                //printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i][j][k].position,grid[i][j][k].num_elems);
-                printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].position,grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].num_elems);
+                printf("(%d,%d,%d) pos: %d elems: %d\n",i,j,k,grid[i][j][k].position,grid[i][j][k].num_elems);
             }
         }
         printf("\n");
@@ -365,10 +355,10 @@ int gpuLoad(void) {
             *h_no_sensors * sizeof(int), NULL, &ret);
     // A debug object TODO remove
     cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-            *h_no_sensors * sizeof(float), NULL, &ret);
+            LIST_SIZE * sizeof(float), NULL, &ret);
     // Start hits array
     cl_mem start_hit_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-            *h_no_sensors * sizeof(int), NULL, &ret);
+            LIST_SIZE * sizeof(int), NULL, &ret);
 
 
     // Copy the lists grid and hit structure to their respective memory buffers
@@ -388,8 +378,23 @@ int gpuLoad(void) {
     // Build the program
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
     
-    // ------------Begin second kernel (FINDER)---------------------
+    if (ret == CL_BUILD_PROGRAM_FAILURE) {
+        // Determine the size of the log
+        size_t log_size;
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+
+        // Allocate memory for the log
+        char *log = (char *) malloc(log_size);
+
+        // Get the log
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, log_size, log, NULL);
+
+        // Print the log
+        printf("%s\n", log);
+    }
+    
     checkError(ret, "Building program");
+    // ------------Begin second kernel (FINDER)---------------------
     
     // Create the OpenCL kernel
     cl_kernel finder_kernel = clCreateKernel(program, "NeighborsFinder", &ret);
@@ -428,7 +433,7 @@ int gpuLoad(void) {
     cl_kernel start_hit_kernel = clCreateKernel(program, "StartHitsFinder", &ret);
  
     // Set the arguments of the kernel
-    ret |= clSetKernelArg(start_hit_kernel, 0, sizeof(cl_mem), (void *)&downup_obj);
+    ret = clSetKernelArg(start_hit_kernel, 0, sizeof(cl_mem), (void *)&downup_obj);
     ret |= clSetKernelArg(start_hit_kernel, 1, sizeof(cl_mem), (void *)&start_hit_obj);
     ret |= clSetKernelArg(start_hit_kernel, 2, sizeof(int), (void *)h_no_sensors);
  
@@ -457,9 +462,9 @@ int gpuLoad(void) {
     float *C = (float*)malloc(sizeof(float)*LIST_SIZE);
     ret = clEnqueueReadBuffer(command_queue, downup_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(downup_str), downup, 0, NULL, NULL);
-    ret = clEnqueueReadBuffer(command_queue, a_mem_obj, CL_TRUE, 0, 
+    ret |= clEnqueueReadBuffer(command_queue, a_mem_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(float), A, 0, NULL, NULL);  // TODO remove
-    ret = clEnqueueReadBuffer(command_queue, start_hit_obj, CL_TRUE, 0, 
+    ret |= clEnqueueReadBuffer(command_queue, start_hit_obj, CL_TRUE, 0, 
             *h_no_hits * sizeof(int), start_hit, 0, NULL, NULL);
 
     checkError(ret, "Enqueue read buffer");
@@ -488,7 +493,7 @@ int gpuLoad(void) {
     checkError(ret, "Releasing variables");
 
     free(A);
-    free(B);
+    
     free(C);
     return 0;
 }
@@ -502,10 +507,8 @@ int main() {
     for(i=0; i < NUM_VELO; i++) {
         for(j=0; j < CLUSTER_ROWS; j++) {
             for(k=0; k < CLUSTER_COLS; k++) {
-                //grid[i][j][k].position = -1; TODO go back
-                //grid[i][j][k].num_elems = 0; TODO go back
-                grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].position = -1;
-                grid[i*CLUSTER_ROWS*CLUSTER_COLS+j*CLUSTER_COLS+k].num_elems = 0;
+                grid[i][j][k].position = -1;
+                grid[i][j][k].num_elems = 0;
             }
         }
     }
