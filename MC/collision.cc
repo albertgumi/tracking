@@ -119,12 +119,36 @@ void saveText(int numHits, list<Hits>* hits, int* hitsPlane, int* hitStart) {
     file.close();
 }
 
+
+/**
+ * Save the track in order to compare it with the tracking algorithm output.
+ *
+ */
+void saveTracks(list<Track> tracks) {
+
+    ofstream trackFile;
+    list<Track>::const_iterator it;
+    
+    trackFile.open ("tracklist.track");
+    
+    for (it = tracks.begin(); it != tracks.end(); it++) {
+        trackFile << it->dxdz << " " << it->dydz << " " << it->mx << " " << it->my << endl;
+    }
+
+    trackFile.close();
+
+}
+
+/**
+ * Save the collision in binary format.
+ *
+ */
 void saveDump(int numHits, list<Hits>* hits, int* hitsPlane, int* hitStart) {
 
     int i;
     list<Hits>::const_iterator it;
     
-    // TODO don't hardcode
+    // TODO don't hardcode. Parametrize
     ofstream outbin( "collision.dump", ios::binary );
     
     // Num sensors
@@ -158,20 +182,20 @@ void saveDump(int numHits, list<Hits>* hits, int* hitsPlane, int* hitStart) {
             outbin.write( reinterpret_cast <const char*> (&it->y), sizeof(float));
         }
     }
-    
+
     // Z
     for(i=0; i < Const::numSensors; i++) {
         for (it = hits[i].begin(); it != hits[i].end(); it++) {
             outbin.write( reinterpret_cast <const char*> (&it->z), sizeof(int));
         }
     }
-    
+
     outbin.close();
     
 }
 
 
-void collision(int &numHits, int* hitsPlane, list<Hits>* hits, int* hitStart) {
+void collision(int &numHits, int* hitsPlane, list<Hits>* hits, int* hitStart, list<Track> &tracks) {
 
     static TRandom r;
     int i, j;
@@ -183,14 +207,14 @@ void collision(int &numHits, int* hitsPlane, list<Hits>* hits, int* hitStart) {
     vertex.z = r.Gaus(0.,Const::resolution);
     
     
-    // Create the list of tracks
-    list<Track> tracks;
+
     for(i=0; i < Const::numTracks; i++) {
         Track newTrack;
         
         newTrack.dxdz = r.Uniform(0,0.4);
         newTrack.dydz = r.Uniform(0,0.4);
         
+        //FIXME calculate properly the M
         newTrack.mx = vertex.x;
         newTrack.my = vertex.y;
         
@@ -237,16 +261,20 @@ int main() {
     int hitsPlane[48] = {0};
     int hitStart[48] = {0};
     
+    // Create the list of tracks
+    list<Track> tracks;
+    
     // create the array of 48 Hits lists
     list<Hits> hitsList[48];
     
-    collision(numHits, hitsPlane, hitsList, hitStart);
+    collision(numHits, hitsPlane, hitsList, hitStart, tracks);
     hitStart[0] = 0;
     for(i=1; i < Const::numSensors; i++) {
         hitStart[i] = hitStart[i-1] + hitsPlane[i-1];
     }
     saveText(numHits, hitsList, hitsPlane,hitStart);
     saveDump(numHits, hitsList, hitsPlane,hitStart);
+    saveTracks(tracks);
     
     return 0;
 }
